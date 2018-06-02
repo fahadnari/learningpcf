@@ -1,9 +1,9 @@
 ---
 applications:
-- name: school-of-code-website
+- name: school-of-code1-website
   memory: 64Mb
   instances: 1
   buildpack: https://github.com/cloudfoundry/staticfile-buildpack.git#v1.4.27
   routes:
-  - route: school-of-code-website.cfapps.io
+  - route: school-of-code1-website.cfapps.io
   
