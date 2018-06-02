@@ -1,0 +1,8 @@
+version: '3'
+services:
+  app:
+    image: eu.gcr.io/halfpipe-io/build-oscar
+    command: bash -c 'cd school-of-code-site && ./build'
+    volumes:
+      - ..:/home/dev/code
+      - $HOME/.gradle:/home/dev/.gradle

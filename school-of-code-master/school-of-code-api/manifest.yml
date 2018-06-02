@@ -1,0 +1,8 @@
+---
+applications:
+- name: school-of-code-api
+  memory: 64Mb
+  instances: 1
+  buildpack: https://github.com/cloudfoundry/python-buildpack.git#v1.6.15
+  routes:
+  - route: school-of-code-api.live.cf.private.springer.com

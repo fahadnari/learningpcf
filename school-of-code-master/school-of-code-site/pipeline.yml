@@ -1,0 +1,176 @@
+# Generated using halfpipe cli version 1.32.0
+groups: []
+resources:
+- name: git
+  type: git
+  source:
+    paths:
+    - school-of-code-site
+    private_key: ((github.private_key))
+    uri: git@github.com:springernature/school-of-code.git
+- name: artifacts-school_of_code-school-of-code-site
+  type: gcp-resource
+  source:
+    bucket: halfpipe-artifacts
+    folder: schoolofcode/school-of-code-site
+    json_key: ((gcr.private_key))
+- name: CF api-live school_of_code live
+  type: cf-resource
+  source:
+    api: ((cloudfoundry.api-live))
+    org: school_of_code
+    password: ((cloudfoundry.password))
+    space: live
+    username: ((cloudfoundry.username))
+resource_types:
+- name: gcp-resource
+  type: docker-image
+  source:
+    repository: platformengineering/gcp-resource
+    tag: 0.19.0
+- name: cf-resource
+  type: docker-image
+  source:
+    repository: platformengineering/cf-resource
+    tag: stable
+jobs:
+- name: Lint
+  serial: true
+  plan:
+  - get: git
+    trigger: true
+  - task: run
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          password: ((gcr.private_key))
+          repository: eu.gcr.io/halfpipe-io/build-linter
+          tag: latest
+          username: _json_key
+      run:
+        path: /bin/sh
+        args:
+        - -c
+        - |-
+          which bash > /dev/null
+          if [ $? != 0 ]; then
+            echo "Bash is not present in the docker image"
+            echo "If you script, or any of the script your script is calling depends on bash you will get a strange error message like:"
+            echo "sh: yourscript.sh: command not found"
+            echo "To fix, make sure your docker image contains bash!"
+            echo ""
+            echo ""
+          fi
+          set -e
+          export GIT_REVISION=`cat ../.git/ref`
+          /usr/local/bin/build-linter
+        dir: git/school-of-code-site
+      inputs:
+      - name: git
+        path: ""
+- name: Build
+  serial: true
+  plan:
+  - get: git
+    passed:
+    - Lint
+    trigger: true
+  - task: run
+    privileged: true
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: amidos/dcind
+          tag: latest
+      params:
+        GCR_PRIVATE_KEY: ((gcr.private_key))
+      run:
+        path: /bin/sh
+        args:
+        - -c
+        - |
+          which bash > /dev/null
+          if [ $? != 0 ]; then
+            echo "Bash is not present in the docker image"
+            echo "If you script, or any of the script your script is calling depends on bash you will get a strange error message like:"
+            echo "sh: yourscript.sh: command not found"
+            echo "To fix, make sure your docker image contains bash!"
+            echo ""
+            echo ""
+          fi
+          set -e
+          export GIT_REVISION=`cat ../.git/ref`
+          \source /docker-lib.sh
+          start_docker
+          docker login -u _json_key -p "$GCR_PRIVATE_KEY" https://eu.gcr.io
+
+          docker-compose run -e GIT_REVISION=${GIT_REVISION} app
+          rc=$?
+
+          docker-compose down
+
+          [ $rc -eq 0 ] || exit $rc
+
+
+          if [ -d . ]
+          then
+            mkdir -p ../../artifacts/.
+            cp -r ./. ../../artifacts/./
+          elif [ -f . ]
+          then
+            artifactDir=$(dirname .)
+            mkdir -p ../../artifacts/$artifactDir
+            cp . ../../artifacts/$artifactDir
+          else
+            echo "ERROR: Artifact '.' not found. Try fly hijack to check the filesystem."
+            exit 1
+          fi
+        dir: git/school-of-code-site
+      inputs:
+      - name: git
+        path: ""
+      outputs:
+      - name: artifacts
+        path: ""
+  - put: artifacts-school_of_code-school-of-code-site
+    params:
+      folder: artifacts
+      version_file: git/.git/ref
+- name: Deploy to Live
+  serial: true
+  plan:
+  - get: git
+    passed:
+    - Build
+    trigger: true
+  - get: artifacts-school_of_code-school-of-code-site
+    params:
+      folder: artifacts
+      version_file: git/.git/ref
+  - put: CF api-live school_of_code live
+    params:
+      appPath: artifacts-school_of_code-school-of-code-site
+      command: halfpipe-push
+      gitRefPath: git/.git/ref
+      manifestPath: git/school-of-code-site/manifest.yml
+      testDomain: live.cf.private.springer.com
+  - put: CF api-live school_of_code live
+    params:
+      appPath: artifacts-school_of_code-school-of-code-site
+      command: halfpipe-promote
+      gitRefPath: git/.git/ref
+      manifestPath: git/school-of-code-site/manifest.yml
+      testDomain: live.cf.private.springer.com
+  ensure:
+    put: CF api-live school_of_code live
+    params:
+      appPath: artifacts-school_of_code-school-of-code-site
+      command: halfpipe-cleanup
+      gitRefPath: git/.git/ref
+      manifestPath: git/school-of-code-site/manifest.yml
+      testDomain: live.cf.private.springer.com
+

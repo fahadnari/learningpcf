@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+PIP='pip'
+if ! $PIP --version >/dev/null 2>&1; then
+    PIP='pip3'
+    if ! $PIP --version >/dev/null 2>&1; then
+        echo "Cannot find pip or pip3; exiting..." 1>&2
+        exit 1
+    fi
+fi
+
+mkdir -p vendor
+
+$PIP install --download vendor -r requirements.txt --no-binary :all:
